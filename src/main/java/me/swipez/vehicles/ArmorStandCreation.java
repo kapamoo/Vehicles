@@ -1,10 +1,8 @@
 package me.swipez.vehicles;
 
+import me.swipez.vehicles.commands.CreationModeCommand;
 import org.bukkit.*;
-import org.bukkit.entity.ArmorStand;
-import org.bukkit.entity.EntityType;
-import org.bukkit.entity.Horse;
-import org.bukkit.entity.Pig;
+import org.bukkit.entity.*;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataContainer;
@@ -26,6 +24,8 @@ public class ArmorStandCreation {
     int indexCycle = 0;
     public HashMap<Integer, UUID> allArmorStands = new HashMap<>();
     public List<UUID> seats = new ArrayList<>();
+    public List<UUID> blades = new ArrayList<>();
+    public UUID bladeOrigin = null;
 
     CreationSettings creationSettings = new CreationSettings();
 
@@ -45,8 +45,63 @@ public class ArmorStandCreation {
         }
     }
 
+    public void makeBlade(){
+        if (selectedStands.size() == 0){
+            return;
+        }
+        for (UUID uuid : selectedStands){
+            if (uuid.equals(bladeOrigin)){
+                continue;
+            }
+            blades.add(uuid);
+        }
+    }
+
+    public void makeBladeOrigin(){
+        bladeOrigin = selectedStands.get(0);
+    }
+
     public void moveSeat(double x, double y, double z){
         seat.add(new Vector(x, y, z));
+    }
+
+    public void deselect(int id){
+        for (Map.Entry<Integer, UUID> entry : allArmorStands.entrySet()){
+            if (selectedStands.contains(entry.getValue())){
+                if (entry.getKey() == id){
+                    selectedStands.remove(entry.getValue());
+                    return;
+                }
+            }
+        }
+    }
+
+    public void select(int id){
+        for (Map.Entry<Integer, UUID> entry : allArmorStands.entrySet()) {
+            if (entry.getKey() == id) {
+                selectedStands.add(entry.getValue());
+                return;
+            }
+        }
+    }
+
+    public void clearVisibleIds(){
+        for (Map.Entry<Integer, UUID> entry : allArmorStands.entrySet()) {
+            ArmorStand armorStand = (ArmorStand) Bukkit.getEntity(entry.getValue());
+            armorStand.setCustomName(entry.getKey() + "#");
+            armorStand.setCustomNameVisible(false);
+        }
+    }
+
+    public void displayIds(String block){
+        clearVisibleIds();
+        for (Map.Entry<Integer, UUID> entry : allArmorStands.entrySet()){
+            ArmorStand armorStand = (ArmorStand) Bukkit.getEntity(entry.getValue());
+            if (armorStand.getEquipment().getHelmet().getType().toString().toLowerCase().contains(block.toLowerCase())){
+                armorStand.setCustomName(entry.getKey()+"#");
+                armorStand.setCustomNameVisible(true);
+            }
+        }
     }
 
     public void addAll(List<UUID> uuids){
@@ -172,6 +227,15 @@ public class ArmorStandCreation {
 
     }
 
+    public void deselectAll(String block){
+        for (Map.Entry<Integer, UUID> entry : allArmorStands.entrySet()){
+            ArmorStand armorStand = (ArmorStand) Bukkit.getEntity(entry.getValue());
+            if (armorStand.getEquipment().getHelmet().getType().toString().toLowerCase().contains(block.toLowerCase())){
+                selectedStands.remove(entry.getValue());
+            }
+        }
+    }
+
     public void undo(){
         allArmorStands.remove(lastInt - 1);
         seats.remove(selectedStands.get(selectedStands.size() - 1));
@@ -266,6 +330,13 @@ public class ArmorStandCreation {
                 VehiclesPlugin.storage.getConfig().set(name + ".am." + entry.getKey(), "seat");
                 continue;
             }
+            String extension = "";
+            if (blades.contains(entry.getValue())){
+                extension = "blade";
+            }
+            if (bladeOrigin.equals(entry.getValue())){
+                extension = "bladeOrigin";
+            }
             ArmorStand armorStand = (ArmorStand) Bukkit.getEntity(entry.getValue());
             StringBuilder stringBuilder = new StringBuilder(Utils.convertToString(armorStand.getLocation().clone().subtract(origin.clone()).toVector()));
             stringBuilder.append(";");
@@ -280,6 +351,8 @@ public class ArmorStandCreation {
             stringBuilder.append(armorStand.getEquipment().getItemInMainHand().getType().name());
             stringBuilder.append(";");
             stringBuilder.append(armorStand.getEquipment().getItemInOffHand().getType().name());
+            stringBuilder.append(";");
+            stringBuilder.append(extension);
             VehiclesPlugin.storage.getConfig().set(name + ".am." + entry.getKey(), stringBuilder.toString());
         }
         try {
@@ -287,6 +360,24 @@ public class ArmorStandCreation {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    public static void loadCreation(String name, Location origin, Player owner){
+        List<UUID> seats = loadSeats(name, origin, null);
+        List<UUID> armorStands = loadArmorStands(name, origin, null);
+        List<UUID> blades = loadBlades(name, origin, null);
+        UUID bladeOrigin = loadBladeOrigin(name, origin, null);
+        Vector seatOffset = Utils.convertToVector(VehiclesPlugin.storage.getConfig().getString(name+".seat"));
+        ArmorStandCreation armorStandCreation = new ArmorStandCreation(origin);
+        armorStandCreation.addAll(armorStands);
+        armorStandCreation.addAll(seats);
+        armorStandCreation.addAll(blades);
+        armorStandCreation.addAll(new ArrayList<>(Collections.singletonList(bladeOrigin)));
+        armorStandCreation.seat = origin.clone().add(seatOffset);
+        armorStandCreation.blades.addAll(blades);
+        armorStandCreation.bladeOrigin = bladeOrigin;
+        armorStandCreation.seats.addAll(seats);
+        CreationModeCommand.creationHashMap.put(owner.getUniqueId(), armorStandCreation);
     }
 
     public static List<UUID> loadSeats(String name, Location origin, UUID uuid){
@@ -329,12 +420,61 @@ public class ArmorStandCreation {
         return extraSeats;
     }
 
-    public static List<UUID> loadArmorStands(String name, Location origin, UUID uuid){
+    public static UUID loadBladeOrigin(String name, Location origin, UUID uuid){
+        UUID armorStandId = null;
+        int count = VehiclesPlugin.storage.getConfig().getInt(name + ".count");
+        for (int i = 0; i < count; i++){
+            String key = VehiclesPlugin.storage.getConfig().getString(name + ".am." + i);
+            if (!key.endsWith("bladeOrigin")){
+                continue;
+            }
+            String[] split = key.split(";");
+            Vector vector = new Vector(Double.parseDouble(split[0]), Double.parseDouble(split[1]), Double.parseDouble(split[2]));
+            Vector direction = new Vector(Double.parseDouble(split[3]), Double.parseDouble(split[4]), Double.parseDouble(split[5]));
+            EulerAngle leftArm = new EulerAngle(Double.parseDouble(split[6]), Double.parseDouble(split[7]), Double.parseDouble(split[8]));
+            EulerAngle rightArm = new EulerAngle(Double.parseDouble(split[9]), Double.parseDouble(split[10]), Double.parseDouble(split[11]));
+            ArmorStand armorStand = (ArmorStand) origin.getWorld().spawnEntity(origin.clone().add(vector), EntityType.ARMOR_STAND);
+            Location location = armorStand.getLocation().clone();
+            location.setDirection(direction);
+            armorStand.teleport(location);
+            armorStand.setLeftArmPose(leftArm);
+            armorStand.setRightArmPose(rightArm);
+            armorStand.setGravity(false);
+            armorStand.setVisible(false);
+            armorStand.setBasePlate(false);
+            armorStand.setArms(true);
+            armorStand.setCustomName("Part");
+            armorStand.setCustomNameVisible(false);
+            armorStand.addEquipmentLock(EquipmentSlot.HEAD, ArmorStand.LockType.ADDING_OR_CHANGING);
+            armorStand.addEquipmentLock(EquipmentSlot.HEAD, ArmorStand.LockType.REMOVING_OR_CHANGING);
+            armorStand.addEquipmentLock(EquipmentSlot.CHEST, ArmorStand.LockType.ADDING_OR_CHANGING);
+            armorStand.addEquipmentLock(EquipmentSlot.CHEST, ArmorStand.LockType.REMOVING_OR_CHANGING);
+            armorStand.addEquipmentLock(EquipmentSlot.LEGS, ArmorStand.LockType.ADDING_OR_CHANGING);
+            armorStand.addEquipmentLock(EquipmentSlot.LEGS, ArmorStand.LockType.REMOVING_OR_CHANGING);
+            armorStand.addEquipmentLock(EquipmentSlot.FEET, ArmorStand.LockType.ADDING_OR_CHANGING);
+            armorStand.addEquipmentLock(EquipmentSlot.FEET, ArmorStand.LockType.REMOVING_OR_CHANGING);
+            armorStand.addEquipmentLock(EquipmentSlot.HAND, ArmorStand.LockType.ADDING_OR_CHANGING);
+            armorStand.addEquipmentLock(EquipmentSlot.HAND, ArmorStand.LockType.REMOVING_OR_CHANGING);
+            armorStand.addEquipmentLock(EquipmentSlot.OFF_HAND, ArmorStand.LockType.ADDING_OR_CHANGING);
+            armorStand.addEquipmentLock(EquipmentSlot.OFF_HAND, ArmorStand.LockType.REMOVING_OR_CHANGING);
+            armorStand.getEquipment().setHelmet(new ItemStack(Material.valueOf(split[12])));
+            armorStand.getEquipment().setItemInMainHand(new ItemStack(Material.valueOf(split[13])));
+            armorStand.getEquipment().setItemInOffHand(new ItemStack(Material.valueOf(split[14])));
+            armorStandId = armorStand.getUniqueId();
+            if (uuid != null){
+                PersistentDataContainer persistentDataContainer =  armorStand.getPersistentDataContainer();
+                persistentDataContainer.set(new NamespacedKey(VehiclesPlugin.getPlugin(), "vehicleId"), PersistentDataType.STRING, uuid.toString());
+            }
+        }
+        return armorStandId;
+    }
+
+    public static List<UUID> loadBlades(String name, Location origin, UUID uuid){
         List<UUID> armorStands = new ArrayList<>();
         int count = VehiclesPlugin.storage.getConfig().getInt(name + ".count");
         for (int i = 0; i < count; i++){
             String key = VehiclesPlugin.storage.getConfig().getString(name + ".am." + i);
-            if (key.equals("seat")){
+            if (!key.endsWith("blade")){
                 continue;
             }
             String[] split = key.split(";");
@@ -379,7 +519,60 @@ public class ArmorStandCreation {
         return armorStands;
     }
 
-    public static Vehicle load(String name, Location origin, Vehicles vehicle, UUID owner) {
+    public static List<UUID> loadArmorStands(String name, Location origin, UUID uuid){
+        List<UUID> armorStands = new ArrayList<>();
+        int count = VehiclesPlugin.storage.getConfig().getInt(name + ".count");
+        for (int i = 0; i < count; i++){
+            String key = VehiclesPlugin.storage.getConfig().getString(name + ".am." + i);
+            if (key.equals("seat")){
+                continue;
+            }
+            if (key.endsWith("blade") || key.endsWith("bladeOrigin")){
+                continue;
+            }
+            String[] split = key.split(";");
+            Vector vector = new Vector(Double.parseDouble(split[0]), Double.parseDouble(split[1]), Double.parseDouble(split[2]));
+            Vector direction = new Vector(Double.parseDouble(split[3]), Double.parseDouble(split[4]), Double.parseDouble(split[5]));
+            EulerAngle leftArm = new EulerAngle(Double.parseDouble(split[6]), Double.parseDouble(split[7]), Double.parseDouble(split[8]));
+            EulerAngle rightArm = new EulerAngle(Double.parseDouble(split[9]), Double.parseDouble(split[10]), Double.parseDouble(split[11]));
+            ArmorStand armorStand = (ArmorStand) origin.getWorld().spawnEntity(origin.clone().add(vector), EntityType.ARMOR_STAND);
+            Location location = armorStand.getLocation().clone();
+            location.setDirection(direction);
+            armorStand.teleport(location);
+            armorStand.setLeftArmPose(leftArm);
+            armorStand.setRightArmPose(rightArm);
+            armorStand.setGravity(false);
+            armorStand.setVisible(false);
+            armorStand.setBasePlate(false);
+            armorStand.setArms(true);
+            armorStand.setCustomName("Part");
+            armorStand.setCustomNameVisible(false);
+            armorStand.addEquipmentLock(EquipmentSlot.HEAD, ArmorStand.LockType.ADDING_OR_CHANGING);
+            armorStand.addEquipmentLock(EquipmentSlot.HEAD, ArmorStand.LockType.REMOVING_OR_CHANGING);
+            armorStand.addEquipmentLock(EquipmentSlot.CHEST, ArmorStand.LockType.ADDING_OR_CHANGING);
+            armorStand.addEquipmentLock(EquipmentSlot.CHEST, ArmorStand.LockType.REMOVING_OR_CHANGING);
+            armorStand.addEquipmentLock(EquipmentSlot.LEGS, ArmorStand.LockType.ADDING_OR_CHANGING);
+            armorStand.addEquipmentLock(EquipmentSlot.LEGS, ArmorStand.LockType.REMOVING_OR_CHANGING);
+            armorStand.addEquipmentLock(EquipmentSlot.FEET, ArmorStand.LockType.ADDING_OR_CHANGING);
+            armorStand.addEquipmentLock(EquipmentSlot.FEET, ArmorStand.LockType.REMOVING_OR_CHANGING);
+            armorStand.addEquipmentLock(EquipmentSlot.HAND, ArmorStand.LockType.ADDING_OR_CHANGING);
+            armorStand.addEquipmentLock(EquipmentSlot.HAND, ArmorStand.LockType.REMOVING_OR_CHANGING);
+            armorStand.addEquipmentLock(EquipmentSlot.OFF_HAND, ArmorStand.LockType.ADDING_OR_CHANGING);
+            armorStand.addEquipmentLock(EquipmentSlot.OFF_HAND, ArmorStand.LockType.REMOVING_OR_CHANGING);
+            armorStand.getEquipment().setHelmet(new ItemStack(Material.valueOf(split[12])));
+            armorStand.getEquipment().setItemInMainHand(new ItemStack(Material.valueOf(split[13])));
+            armorStand.getEquipment().setItemInOffHand(new ItemStack(Material.valueOf(split[14])));
+            armorStands.add(armorStand.getUniqueId());
+
+            if (uuid != null){
+                PersistentDataContainer persistentDataContainer =  armorStand.getPersistentDataContainer();
+                persistentDataContainer.set(new NamespacedKey(VehiclesPlugin.getPlugin(), "vehicleId"), PersistentDataType.STRING, uuid.toString());
+            }
+        }
+        return armorStands;
+    }
+
+    public static Vehicle load(String name, Location origin, VehicleType vehicle, UUID owner) {
 
         UUID uuid = UUID.randomUUID();
         String seat = VehiclesPlugin.storage.getConfig().getString(name + ".seat");
@@ -388,6 +581,8 @@ public class ArmorStandCreation {
 
         List<UUID> armorStands = loadArmorStands(name, origin, uuid);
         List<UUID> extraSeats = loadSeats(name, origin, uuid);
+        List<UUID> blades = loadBlades(name, origin, uuid);
+        UUID bladeOrigin = loadBladeOrigin(name, origin, uuid);
 
         ArmorStand realSeat = origin.getWorld().spawn(origin.clone().add(seatVector.clone().subtract(new Vector(0, 0.7, 0))), ArmorStand.class, (pig1 -> {
             pig1.setGravity(false);
@@ -410,7 +605,12 @@ public class ArmorStandCreation {
             pig1.addEquipmentLock(EquipmentSlot.HAND, ArmorStand.LockType.REMOVING_OR_CHANGING);
             pig1.addEquipmentLock(EquipmentSlot.OFF_HAND, ArmorStand.LockType.ADDING_OR_CHANGING);
             pig1.addEquipmentLock(EquipmentSlot.OFF_HAND, ArmorStand.LockType.REMOVING_OR_CHANGING);
+            PersistentDataContainer persistentDataContainer =  pig1.getPersistentDataContainer();
+            persistentDataContainer.set(new NamespacedKey(VehiclesPlugin.getPlugin(), "vehicleId"), PersistentDataType.STRING, uuid.toString());
         }));
+        if (bladeOrigin != null){
+            return new Plane(realSeat.getUniqueId(), armorStands, new Vector(1, 0, 0), origin.clone(), name, extraSeats, vehicle, owner, uuid, blades, bladeOrigin, vehicle.rotateX);
+        }
         return new Vehicle(realSeat.getUniqueId(), armorStands, new Vector(1, 0, 0), origin.clone(), name, extraSeats, vehicle, owner, uuid);
     }
 

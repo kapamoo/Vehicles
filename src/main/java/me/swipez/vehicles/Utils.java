@@ -12,4 +12,9 @@ public class Utils {
     public static String convertToString(EulerAngle eulerAngle){
         return eulerAngle.getX() + ";" + eulerAngle.getY() + ";" + eulerAngle.getZ();
     }
+
+    public static Vector convertToVector(String string){
+        String[] split = string.split(";");
+        return new Vector(Double.parseDouble(split[0]), Double.parseDouble(split[1]), Double.parseDouble(split[2]));
+    }
 }

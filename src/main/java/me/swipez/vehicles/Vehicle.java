@@ -1,5 +1,6 @@
 package me.swipez.vehicles;
 
+import me.swipez.vehicles.events.VehicleEnterEvent;
 import org.bukkit.*;
 import org.bukkit.craftbukkit.v1_19_R1.entity.CraftEntity;
 import org.bukkit.entity.ArmorStand;
@@ -8,7 +9,6 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
-import org.bukkit.util.EulerAngle;
 import org.bukkit.util.Vector;
 
 import java.util.ArrayList;
@@ -18,7 +18,7 @@ import java.util.UUID;
 
 public class Vehicle {
 
-    UUID id;
+    public UUID id;
     List<UUID> armorStands = new ArrayList<>();
     HashMap<UUID, Location> relativeLocations = new HashMap<>();
     HashMap<UUID, Vector> originalOffsets = new HashMap<>();
@@ -35,18 +35,21 @@ public class Vehicle {
     double turningSpeed = 0.15;
     double stepHeight = 1;
     double frictionRate = 0.02;
+    double gravityUpdateRate = 5;
 
     boolean crashed = false;
+    boolean checkedForTires = false;
     double turnMultiplier = 0;
 
     public String color = null;
     public String enumName = "";
     UUID owner;
+    private VehicleType vehicleType = null;
 
     List<UUID> otherSeats = new ArrayList<>();
     List<UUID> probablyTires = new ArrayList<>();
 
-    public Vehicle(UUID seat, List<UUID> armorStands, Vector forwards, Location origin, String name, List<UUID> extraSeats, Vehicles vehicles, UUID owner, UUID vehicleId) {
+    public Vehicle(UUID seat, List<UUID> armorStands, Vector forwards, Location origin, String name, List<UUID> extraSeats, VehicleType vehicleType, UUID owner, UUID vehicleId) {
         this.id = vehicleId;
         this.otherSeats = extraSeats;
         this.seat = seat;
@@ -54,25 +57,47 @@ public class Vehicle {
         this.armorStands = armorStands;
         this.forwards = forwards;
         this.origin = origin.clone();
-        if (vehicles != null){
-            this.enumName = vehicles.name();
-            this.speed = vehicles.speed;
-            this.name = vehicles.carName;
-            this.gainRate = vehicles.gainRate;
-            this.turningSpeed = vehicles.turnRate;
-            this.stepHeight = vehicles.stepHeight;
+        if (vehicleType != null){
+            this.enumName = vehicleType.name();
+            this.speed = vehicleType.speed;
+            this.name = vehicleType.carName;
+            this.gainRate = vehicleType.gainRate;
+            this.turningSpeed = vehicleType.turnRate;
+            this.stepHeight = vehicleType.stepHeight;
+            this.vehicleType = vehicleType;
         }
         this.owner = owner;
+
+        VehiclesPlugin.vehiclesOwnedByPlayers.putIfAbsent(owner, new ArrayList<>());
+        List<Vehicle> vehiclesList = VehiclesPlugin.vehiclesOwnedByPlayers.get(owner);
+        if (vehiclesList == null){
+            vehiclesList = new ArrayList<>();
+        }
+        vehiclesList.add(this);
+        VehiclesPlugin.vehiclesOwnedByPlayers.put(owner, vehiclesList);
+
+        OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(owner);
+        try {
+            if (!VehiclesPlugin.nameMappings.containsKey(offlinePlayer.getName().toLowerCase())){
+                System.out.printf("Adding %s to name mappings%n", offlinePlayer.getName().toLowerCase());
+                VehiclesPlugin.nameMappings.put(offlinePlayer.getName(), owner);
+            }
+        } catch (NullPointerException ignored){
+            // ignore
+        }
 
         VehiclesPlugin.allSeats.add(seat);
         VehiclesPlugin.vehicles.put(id, this);
 
-        if (Bukkit.getEntity(armorStands.get(0)) == null){
-            // World unloaded bug
-            VehiclesPlugin.delayedVehicles.put(origin, this);
-            VehiclesPlugin.getPlugin().getLogger().info("World unloaded bug, delaying vehicle");
-            VehiclesPlugin.getPlugin().getLogger().info(VehiclesPlugin.delayedVehicles.size()+ " vehicles delayed");
-            return;
+
+        for (UUID uuid : armorStands){
+            if (Bukkit.getEntity(uuid) == null){
+                // World unloaded bug
+                VehiclesPlugin.delayedVehicles.put(origin, this);
+                VehiclesPlugin.getPlugin().getLogger().info("World unloaded bug, delaying vehicle");
+                VehiclesPlugin.getPlugin().getLogger().info(VehiclesPlugin.delayedVehicles.size()+ " vehicles delayed");
+                return;
+            }
         }
 
         for (UUID uuid : extraSeats){
@@ -94,6 +119,10 @@ public class Vehicle {
         for (int i = 0; i < 360; i++){
             rotate(0.1);
         }
+    }
+
+    public VehicleType getVehicleType(){
+        return vehicleType;
     }
 
     // ONLY FOR USE WITH DELAYED VEHICLES (Ones that want to spawn in locations that are not loaded)
@@ -132,7 +161,7 @@ public class Vehicle {
 
     public void dye(String color){
         this.color = color;
-        if (probablyTires.isEmpty()){
+        if (!checkedForTires){
             for (UUID uuid : relativeLocations.keySet()){
                 Entity entity = Bukkit.getEntity(uuid);
                 if (entity != null){
@@ -146,6 +175,7 @@ public class Vehicle {
                     }
                 }
             }
+            checkedForTires = true;
         }
         HashMap<Material, Integer> materialCount = new HashMap<>();
         for (UUID uuid : relativeLocations.keySet()){
@@ -207,22 +237,60 @@ public class Vehicle {
             }
         }
         if (clearId){
+            List<Vehicle> vehicles = VehiclesPlugin.vehiclesOwnedByPlayers.get(owner);
+            vehicles.remove(this);
+            VehiclesPlugin.vehiclesOwnedByPlayers.put(owner, vehicles);
             VehiclesPlugin.vehicles.remove(id);
+            VehiclesPlugin.allSeats.remove(seat);
         }
     }
 
     public void attemptSit(Player player){
-        if (getSeat().getPassengers().isEmpty()){
-            getSeat().addPassenger(player);
-        }
-        else {
+        if (VehiclesPlugin.settings.ownerOnlyRider && !isOwnedBy(player)){
             if (otherSeats.isEmpty()){
                 return;
             }
             for (UUID uuid : otherSeats){
                 if (Bukkit.getEntity(uuid).getPassengers().isEmpty()){
-                    Bukkit.getEntity(uuid).addPassenger(player);
+                    VehicleEnterEvent vehicleEnterEvent = new VehicleEnterEvent(player, this, false);
+                    Bukkit.getPluginManager().callEvent(vehicleEnterEvent);
+                    if (!vehicleEnterEvent.isCancelled()){
+                        Bukkit.getEntity(uuid).addPassenger(player);
+                        return;
+                    }
+                }
+            }
+        }
+        else if (VehiclesPlugin.settings.ownerOnlyRider && isOwnedBy(player)){
+            if (getSeat().getPassengers().isEmpty()){
+                VehicleEnterEvent vehicleEnterEvent = new VehicleEnterEvent(player, this, true);
+                Bukkit.getPluginManager().callEvent(vehicleEnterEvent);
+                if (!vehicleEnterEvent.isCancelled()){
+                    getSeat().addPassenger(player);
+                }
+            }
+        }
+        else {
+            if (getSeat().getPassengers().isEmpty()){
+                VehicleEnterEvent vehicleEnterEvent = new VehicleEnterEvent(player, this, true);
+                Bukkit.getPluginManager().callEvent(vehicleEnterEvent);
+                if (!vehicleEnterEvent.isCancelled()){
+                    getSeat().addPassenger(player);
+                }
+            }
+            else {
+                if (otherSeats.isEmpty()){
                     return;
+                }
+                for (UUID uuid : otherSeats){
+                    if (Bukkit.getEntity(uuid).getPassengers().isEmpty()){
+                        VehicleEnterEvent vehicleEnterEvent = new VehicleEnterEvent(player, this, false);
+                        Bukkit.getPluginManager().callEvent(vehicleEnterEvent);
+                        if (!vehicleEnterEvent.isCancelled()){
+                            Bukkit.getEntity(uuid).addPassenger(player);
+                            return;
+                        }
+                    }
                 }
             }
         }
@@ -251,6 +319,12 @@ public class Vehicle {
             Location destination = origin.clone().add(newX, y, newZ);
             destination.setDirection(relativeLocations.get(uuid).clone().getDirection().rotateAroundY(-(angle)));
             CraftEntity craftEntity = (CraftEntity) entity;
+            if (craftEntity == null){
+                if (!VehiclesPlugin.delayedVehicles.containsValue(this)){
+                    VehiclesPlugin.delayedVehicles.put(origin, this);
+                }
+                continue;
+            }
             craftEntity.getHandle().b(destination.getX(), destination.getY(), destination.getZ(), destination.getYaw(), destination.getPitch());
             relativeLocations.put(uuid, entity.getLocation().clone().subtract(origin));
         }
@@ -443,7 +517,7 @@ public class Vehicle {
             while (!testLoc.clone().getBlock().getType().isSolid()){
                 testLoc.add(0, -groundDistance, 0);
                 times++;
-                if (times > 5){
+                if (times > gravityUpdateRate){
                     break;
                 }
             }

@@ -6,14 +6,15 @@ import me.swipez.vehicles.commands.VehicleCommand;
 import me.swipez.vehicles.config.ConfigGenerator;
 import me.swipez.vehicles.gui.GeneralListeners;
 import me.swipez.vehicles.items.ItemRegistry;
+import me.swipez.vehicles.settings.PluginSettings;
 import org.bukkit.*;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Player;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
-import org.bukkit.util.Vector;
 
 import java.io.File;
 import java.io.IOException;
@@ -28,12 +29,18 @@ public final class VehiclesPlugin extends JavaPlugin {
 
     public static ConfigGenerator storage;
     public static ConfigGenerator persistentStorage;
+    public static ConfigGenerator mainConfig;
+    public static HashMap<String, UUID> nameMappings = new HashMap<>();
     public static HashMap<UUID, Vehicle> vehicles = new HashMap<>();
+    public static HashMap<UUID, List<Vehicle>> vehiclesOwnedByPlayers = new HashMap<>();
     public static HashMap<Location, Vehicle> delayedVehicles = new HashMap<>();
     public static List<UUID> allSeats = new ArrayList<>();
 
     // THIS ENABLES CREATION FUNCTIONS FOR MAKING CARS, FOR OTHERS THAT ARE CREATING CARS, GOOD LUCK FIGURING OUT HOW TO USE IT MUAHAHAHA
     public static boolean creatorModeActive = false;
+
+    public static PluginSettings settings;
+    public static WorldGuardManager worldGuardManager = null;
 
     @Override
     public void onEnable() {
@@ -42,12 +49,25 @@ public final class VehiclesPlugin extends JavaPlugin {
         if (!mainFolder.exists()){
             mainFolder.mkdir();
         }
+        attemptToUpdateCarFile();
+        try {
+            worldGuardManager = new WorldGuardManager();
+        }
+        catch (NoClassDefFoundError e){
+            Bukkit.getLogger().info("WorldGuard not found, disabling WorldGuard support.");
+        }
         // Export stored cars
         storage = new ConfigGenerator(getDataFolder(), "stored_cars");
         persistentStorage = new ConfigGenerator(getDataFolder(), "persistence_file");
-        attemptToUpdateCarFile();
+        mainConfig = new ConfigGenerator(getDataFolder(), "config");
+        mainConfig.addDefaultToConfig("owner-only-drivers", false);
+        mainConfig.addDefaultToConfig("planes", true);
+        mainConfig.buildConfig();
+
+
         plugin = this;
         getCommand("vehicle").setExecutor(new VehicleCommand());
+        getCommand("vehicle").setTabCompleter(new VehicleCommand.VehicleCommandCompleter());
         getCommand("creationmode").setExecutor(new CreationModeCommand());
         getCommand("armorstandify").setExecutor(new ArmorStandMakeCommand());
         getServer().getPluginManager().registerEvents(new GeneralListeners(), this);
@@ -55,6 +75,8 @@ public final class VehiclesPlugin extends JavaPlugin {
         ItemRegistry.registerRecipes();
 
         loadFromFile();
+
+        settings = new PluginSettings();
     }
 
     public void saveToFile(){
@@ -90,7 +112,7 @@ public final class VehiclesPlugin extends JavaPlugin {
     }
 
     public void loadFromFile(){
-        getLogger().info("Loading from file");
+        getLogger().info("Loading from persistence file");
         int vehicleCount = persistentStorage.getConfig().getInt("vehicleCount");
         for (int i = 0; i < vehicleCount; i++){
             String vehicleString = persistentStorage.getConfig().getString("vh."+i);
@@ -100,7 +122,7 @@ public final class VehiclesPlugin extends JavaPlugin {
             String name = vehicleSplit[4];
             String color = vehicleSplit[5];
             UUID owner = UUID.fromString(vehicleSplit[6]);
-            Vehicles vehicle = Vehicles.valueOf(name);
+            VehicleType vehicle = VehicleType.valueOf(name);
             Vehicle spawned = ArmorStandCreation.load(vehicle.carName, location, vehicle, owner);
             if (!color.equals("null")){
                 spawned.color = color;
@@ -125,11 +147,12 @@ public final class VehiclesPlugin extends JavaPlugin {
             exportResourceToFile("stored_cars.yml", otherTemp);
 
             // Make config
-            ConfigGenerator configGenerator = new ConfigGenerator(getDataFolder(), "stored_cars_temp");
+            YamlConfiguration tempConfig = YamlConfiguration.loadConfiguration(otherTemp);
+            YamlConfiguration currentConfig = YamlConfiguration.loadConfiguration(destination);
 
             // Compare values
-            double currentValue = configGenerator.getConfig().getDouble("version");
-            double newValue = storage.getConfig().getDouble("version");
+            double currentValue = tempConfig.getDouble("version");
+            double newValue = currentConfig.getDouble("version");
 
             getLogger().info("Current version: " + newValue);
             getLogger().info("One Stored in Jars version: " + currentValue);

@@ -3,6 +3,8 @@ package me.swipez.vehicles.gui;
 import me.swipez.vehicles.*;
 import me.swipez.vehicles.commands.ArmorStandMakeCommand;
 import me.swipez.vehicles.commands.CreationModeCommand;
+import me.swipez.vehicles.events.VehicleEnterEvent;
+import me.swipez.vehicles.events.VehiclePlaceEvent;
 import me.swipez.vehicles.items.ItemRegistry;
 import me.swipez.vehicles.recipe.VehicleBox;
 import org.bukkit.*;
@@ -16,12 +18,10 @@ import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.player.PlayerInteractAtEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
-import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.scheduler.BukkitRunnable;
-import org.bukkit.util.Vector;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -32,6 +32,41 @@ public class GeneralListeners implements Listener {
 
     HashMap<UUID, EquipmentGUI> equipmentGUIHashMap = new HashMap<>();
     List<UUID> ignoredPlayers = new ArrayList<>();
+
+    @EventHandler
+    public void onVehiclePlaced(VehiclePlaceEvent event){
+        if (VehiclesPlugin.worldGuardManager != null){
+            try {
+                if (!VehiclesPlugin.worldGuardManager.canPlace(event.getLocation(), event.getPlayer())){
+                    event.setCancelled(true);
+                    event.getPlayer().sendMessage(ChatColor.RED+"You cannot place a vehicle here!");
+                }
+            }
+            catch (Exception e){
+                e.printStackTrace();
+            }
+        }
+        if (event.getVehicle() instanceof Plane){
+            if (!VehiclesPlugin.settings.planes){
+                if (!event.getPlayer().hasPermission("vehicles.plane.bypass")){
+                    event.getPlayer().sendMessage(ChatColor.RED+"Planes have been disabled on this server!");
+                    event.setCancelled(true);
+                }
+            }
+        }
+    }
+
+    @EventHandler
+    public void onVehicleEntered(VehicleEnterEvent event){
+        if (event.getVehicle() instanceof Plane){
+            if (!VehiclesPlugin.settings.planes){
+                if (!event.getPlayer().hasPermission("vehicles.plane.bypass")){
+                    event.getPlayer().sendMessage(ChatColor.RED+"Planes have been disabled on this server!");
+                    event.setCancelled(true);
+                }
+            }
+        }
+    }
 
     @EventHandler
     public void onSeatGetsHurt(EntityDamageEvent event){
@@ -72,13 +107,46 @@ public class GeneralListeners implements Listener {
         if (event.getItemInHand().isSimilar(ItemRegistry.MOTOR)){
             event.setCancelled(true);
         }
-        VehicleBox vehicleBox = VehicleBox.getBox(event.getItemInHand(), ChatColor.WHITE);
-        if (vehicleBox != null){
-            Vehicles vehicle = vehicleBox.vehicle;
-            event.getPlayer().getInventory().getItemInMainHand().setAmount(event.getPlayer().getInventory().getItemInMainHand().getAmount()-1);
+        if (event.getItemInHand().isSimilar(ItemRegistry.FLYING_MOTOR)){
+            event.setCancelled(true);
+        }
+        VehicleBox mainHandBox = VehicleBox.getBox(event.getPlayer().getInventory().getItemInMainHand(), ChatColor.WHITE);
+        VehicleBox offHandBox = VehicleBox.getBox(event.getPlayer().getInventory().getItemInOffHand(), ChatColor.WHITE);
+        if (mainHandBox != null){
+            VehicleType vehicle = mainHandBox.vehicle;
             Block block = event.getBlock();
             Vehicle spawned = ArmorStandCreation.load(vehicle.carName, block.getLocation().clone(), vehicle, event.getPlayer().getUniqueId());
-            spawned.dye(vehicleBox.color);
+
+            // Call event
+            VehiclePlaceEvent vehiclePlaceEvent = new VehiclePlaceEvent(event.getPlayer(), spawned, event.getBlock().getLocation());
+            Bukkit.getPluginManager().callEvent(vehiclePlaceEvent);
+            if (vehiclePlaceEvent.isCancelled()){
+                spawned.remove(true);
+                event.setCancelled(true);
+                return;
+            }
+
+            event.getPlayer().getInventory().getItemInMainHand().setAmount(event.getPlayer().getInventory().getItemInMainHand().getAmount()-1);
+            spawned.dye(mainHandBox.color);
+            block.getWorld().spawnParticle(Particle.EXPLOSION_HUGE, block.getLocation().clone(), 5);
+            event.setCancelled(true);
+        }
+        if (offHandBox != null){
+            VehicleType vehicle = offHandBox.vehicle;
+            Block block = event.getBlock();
+            Vehicle spawned = ArmorStandCreation.load(vehicle.carName, block.getLocation().clone(), vehicle, event.getPlayer().getUniqueId());
+
+            // Call event
+            VehiclePlaceEvent vehiclePlaceEvent = new VehiclePlaceEvent(event.getPlayer(), spawned, event.getBlock().getLocation());
+            Bukkit.getPluginManager().callEvent(vehiclePlaceEvent);
+            if (vehiclePlaceEvent.isCancelled()){
+                spawned.remove(true);
+                event.setCancelled(true);
+                return;
+            }
+
+            event.getPlayer().getInventory().getItemInOffHand().setAmount(event.getPlayer().getInventory().getItemInOffHand().getAmount()-1);
+            spawned.dye(offHandBox.color);
             block.getWorld().spawnParticle(Particle.EXPLOSION_HUGE, block.getLocation().clone(), 5);
             event.setCancelled(true);
         }
@@ -100,7 +168,7 @@ public class GeneralListeners implements Listener {
                             return;
                         }
                         if (event.getPlayer().isSneaking()){
-                            VehicleBox vehicleBox = VehicleBox.vehicleBoxes.get(Vehicles.valueOf(vehicle.enumName));
+                            VehicleBox vehicleBox = VehicleBox.vehicleBoxes.get(VehicleType.valueOf(vehicle.enumName));
                             VehicleBox coloredBox = vehicleBox.getAlternateColor(vehicle.color, ChatColor.WHITE);
                             vehicle.remove(true);
                             event.getPlayer().playSound(event.getPlayer().getLocation(), Sound.ENTITY_CHICKEN_EGG, 1, 1);
@@ -109,6 +177,14 @@ public class GeneralListeners implements Listener {
                         }
                     }
                     vehicle.attemptSit(event.getPlayer());
+                    if (vehicle instanceof Plane plane){
+                        new BukkitRunnable() {
+                            @Override
+                            public void run() {
+                                plane.drivable = true;
+                            }
+                        }.runTaskLater(VehiclesPlugin.getPlugin(), 20);
+                    }
                 }
             }
         }

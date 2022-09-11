@@ -2,6 +2,9 @@ name: Vehicles
 version: '${project.version}'
 main: me.swipez.vehicles.VehiclesPlugin
 api-version: 1.19
+loadbefore: ["WorldGuard"]
+softdepend:
+  - "WorldGuard"
 authors: [ notnotnotswipez ]
 commands:
   vehicle:

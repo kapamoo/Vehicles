@@ -34,10 +34,7 @@ public class CreationModeCommand implements CommandExecutor {
             }
             else {
                 if (args[0].equals("load")){
-                    List<UUID> armorStands = ArmorStandCreation.loadArmorStands(args[1], player.getLocation().clone(), null);
-                    ArmorStandCreation armorStandCreation = new ArmorStandCreation(player.getLocation().clone());
-                    armorStandCreation.addAll(armorStands);
-                    CreationModeCommand.creationHashMap.put(player.getUniqueId(), armorStandCreation);
+                    ArmorStandCreation.loadCreation(args[1], player.getLocation().clone(), player);
                 }
                 if (args[0].equals("save")){
                     String name =  args[1];
@@ -82,6 +79,9 @@ public class CreationModeCommand implements CommandExecutor {
                 if (args[0].equals("selectall")){
                     creationHashMap.get(player.getUniqueId()).selectAll(args[1]);
                 }
+                if (args[0].equals("deselectall")){
+                    creationHashMap.get(player.getUniqueId()).deselectAll(args[1]);
+                }
                 if (args[0].equals("seat")){
                     ArmorStandCreation armorStandCreation = creationHashMap.get(player.getUniqueId());
                     for (ArmorStand armorStand : armorStandCreation.getSelectedStands()){
@@ -94,6 +94,23 @@ public class CreationModeCommand implements CommandExecutor {
                             player.sendMessage(ChatColor.GREEN+"Seat added");
                         }
                     }
+                }
+                if (args[0].equals("blade")){
+                    ArmorStandCreation armorStandCreation = creationHashMap.get(player.getUniqueId());
+                    armorStandCreation.makeBlade();
+                }
+                if (args[0].equalsIgnoreCase("bladeorigin")){
+                    ArmorStandCreation armorStandCreation = creationHashMap.get(player.getUniqueId());
+                    armorStandCreation.makeBladeOrigin();
+                }
+                if (args[0].equalsIgnoreCase("showid")){
+                    creationHashMap.get(player.getUniqueId()).displayIds(args[1]);
+                }
+                if (args[0].equalsIgnoreCase("deselect")){
+                    creationHashMap.get(player.getUniqueId()).deselect(Integer.parseInt(args[1]));
+                }
+                if (args[0].equalsIgnoreCase("select")){
+                    creationHashMap.get(player.getUniqueId()).select(Integer.parseInt(args[1]));
                 }
             }
         }

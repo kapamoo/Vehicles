@@ -1,6 +1,6 @@
 package me.swipez.vehicles.items;
 
-import me.swipez.vehicles.Vehicles;
+import me.swipez.vehicles.VehicleType;
 import me.swipez.vehicles.VehiclesPlugin;
 import me.swipez.vehicles.recipe.VehicleBox;
 import me.swipez.vehicles.utils.ItemBuilder;
@@ -50,16 +50,28 @@ public class ItemRegistry {
             .flags(ItemFlag.HIDE_ENCHANTS)
             .build();
 
-    public static VehicleBox MOTORCYCLE_BOX = new VehicleBox(Vehicles.MOTORCYCLE, "red", ChatColor.RED);
-    public static VehicleBox FORMULA_BOX = new VehicleBox(Vehicles.FORMULA_CAR, "light_blue", ChatColor.BLUE);
-    public static VehicleBox NORMAL_BOX = new VehicleBox(Vehicles.NORMAL_CAR, "yellow", ChatColor.YELLOW);
-    public static VehicleBox MONSTER_TRUCK_BOX = new VehicleBox(Vehicles.MONSTER_TRUCK, "lime", ChatColor.GREEN);
-    public static VehicleBox FAMILY_BOX = new VehicleBox(Vehicles.FAMILY_CAR, "pink", ChatColor.LIGHT_PURPLE);
-    public static VehicleBox HOTROD_BOX = new VehicleBox(Vehicles.HOTROD, "white", ChatColor.WHITE);
-    public static VehicleBox VAN_BOX = new VehicleBox(Vehicles.VAN, "black", ChatColor.DARK_GRAY);
-    public static VehicleBox TOASTER_BOX = new VehicleBox(Vehicles.TOASTER, "white", ChatColor.WHITE);
+    public static ItemStack FLYING_MOTOR = ItemBuilder.of(Material.DROPPER)
+            .name(ChatColor.WHITE.toString()+ChatColor.ITALIC+ChatColor.BOLD+"Flying Motor")
+            .enchantment(Enchantment.CHANNELING, 1)
+            .flags(ItemFlag.HIDE_ENCHANTS)
+            .build();
+
+    public static VehicleBox MOTORCYCLE_BOX = new VehicleBox(VehicleType.MOTORCYCLE, "red", ChatColor.RED);
+    public static VehicleBox FORMULA_BOX = new VehicleBox(VehicleType.FORMULA_CAR, "light_blue", ChatColor.BLUE);
+    public static VehicleBox NORMAL_BOX = new VehicleBox(VehicleType.NORMAL_CAR, "yellow", ChatColor.YELLOW);
+    public static VehicleBox MONSTER_TRUCK_BOX = new VehicleBox(VehicleType.MONSTER_TRUCK, "lime", ChatColor.GREEN);
+    public static VehicleBox FAMILY_BOX = new VehicleBox(VehicleType.FAMILY_CAR, "pink", ChatColor.LIGHT_PURPLE);
+    public static VehicleBox HOTROD_BOX = new VehicleBox(VehicleType.HOTROD, "white", ChatColor.WHITE);
+    public static VehicleBox VAN_BOX = new VehicleBox(VehicleType.VAN, "black", ChatColor.DARK_GRAY);
+    public static VehicleBox TOASTER_BOX = new VehicleBox(VehicleType.TOASTER, "white", ChatColor.WHITE);
+    public static VehicleBox HELICOPTER_BOX = new VehicleBox(VehicleType.HELICOPTER, "green", ChatColor.DARK_GREEN);
+    public static VehicleBox JET_BOX = new VehicleBox(VehicleType.JET, "gray", ChatColor.GRAY);
+    public static VehicleBox PRIVATE_JET_BOX = new VehicleBox(VehicleType.PRIVATE_JET, "white", ChatColor.WHITE);
+    public static VehicleBox BIPLANE_BOX = new VehicleBox(VehicleType.BIPLANE, "yellow", ChatColor.YELLOW);
+    public static VehicleBox SPY_COPTER_BOX = new VehicleBox(VehicleType.SPY_COPTER, "red", ChatColor.RED);
 
     public static void registerRecipes(){
+        registerFlyingMotorRecipe();
         registerWheelRecipe();
         registerMotorRecipe();
         registerMotorcycleRecipe();
@@ -69,6 +81,70 @@ public class ItemRegistry {
         registerMonsterTruckRecipe();
         registerHotRodRecipe();
         registerNormalCarRecipe();
+        registerHelicopterRecipe();
+        registerPrivateJetRecipe();
+        registerJetRecipe();
+        registerBiplaneRecipe();
+        registerSpyCopterRecipe();
+    }
+
+    private static void registerJetRecipe(){
+        ShapedRecipe shapedRecipe = new ShapedRecipe(new NamespacedKey(VehiclesPlugin.getPlugin(), "jet"), JET_BOX.getItemStack())
+                .shape("IGI","RMR","WDW")
+                .setIngredient('W', new RecipeChoice.ExactChoice(WHEEL))
+                .setIngredient('M', new RecipeChoice.ExactChoice(FLYING_MOTOR))
+                .setIngredient('I', new RecipeChoice.MaterialChoice(Material.IRON_BLOCK))
+                .setIngredient('G', new RecipeChoice.MaterialChoice(Material.GLASS))
+                .setIngredient('R', new RecipeChoice.MaterialChoice(Material.REDSTONE_BLOCK))
+                .setIngredient('D', new RecipeChoice.MaterialChoice(Material.DIAMOND));
+        Bukkit.addRecipe(shapedRecipe);
+    }
+
+    private static void registerHelicopterRecipe(){
+        ShapedRecipe shapedRecipe = new ShapedRecipe(new NamespacedKey(VehiclesPlugin.getPlugin(), "helicopter"), HELICOPTER_BOX.getItemStack())
+                .shape("CCC","GMG","WDW")
+                .setIngredient('W', new RecipeChoice.ExactChoice(WHEEL))
+                .setIngredient('M', new RecipeChoice.ExactChoice(FLYING_MOTOR))
+                .setIngredient('C', new RecipeChoice.MaterialChoice(Material.COPPER_INGOT))
+                .setIngredient('G', new RecipeChoice.MaterialChoice(Material.GLASS))
+                .setIngredient('D', new RecipeChoice.MaterialChoice(Material.DIAMOND));
+        Bukkit.addRecipe(shapedRecipe);
+    }
+
+    private static void registerSpyCopterRecipe(){
+        ShapedRecipe shapedRecipe = new ShapedRecipe(new NamespacedKey(VehiclesPlugin.getPlugin(), "spy_copter"), SPY_COPTER_BOX.getItemStack())
+                .shape("CCC","RMG","WDW")
+                .setIngredient('W', new RecipeChoice.ExactChoice(WHEEL))
+                .setIngredient('M', new RecipeChoice.ExactChoice(FLYING_MOTOR))
+                .setIngredient('C', new RecipeChoice.MaterialChoice(Material.COPPER_INGOT))
+                .setIngredient('R', new RecipeChoice.MaterialChoice(Material.REDSTONE_BLOCK))
+                .setIngredient('G', new RecipeChoice.MaterialChoice(Material.GLASS))
+                .setIngredient('D', new RecipeChoice.MaterialChoice(Material.DIAMOND));
+        Bukkit.addRecipe(shapedRecipe);
+    }
+
+    private static void registerPrivateJetRecipe(){
+        ShapedRecipe shapedRecipe = new ShapedRecipe(new NamespacedKey(VehiclesPlugin.getPlugin(), "private_jet"), PRIVATE_JET_BOX.getItemStack())
+                .shape("II ","RMG","WDW")
+                .setIngredient('W', new RecipeChoice.ExactChoice(WHEEL))
+                .setIngredient('M', new RecipeChoice.ExactChoice(FLYING_MOTOR))
+                .setIngredient('I', new RecipeChoice.MaterialChoice(Material.IRON_BLOCK))
+                .setIngredient('R', new RecipeChoice.MaterialChoice(Material.REDSTONE_BLOCK))
+                .setIngredient('G', new RecipeChoice.MaterialChoice(Material.GLASS))
+                .setIngredient('D', new RecipeChoice.MaterialChoice(Material.DIAMOND));
+        Bukkit.addRecipe(shapedRecipe);
+    }
+
+    private static void registerBiplaneRecipe(){
+        ShapedRecipe shapedRecipe = new ShapedRecipe(new NamespacedKey(VehiclesPlugin.getPlugin(), "biplane"), BIPLANE_BOX.getItemStack())
+                .shape("III","RMG","WDW")
+                .setIngredient('W', new RecipeChoice.ExactChoice(WHEEL))
+                .setIngredient('M', new RecipeChoice.ExactChoice(FLYING_MOTOR))
+                .setIngredient('I', new RecipeChoice.MaterialChoice(Material.IRON_BLOCK))
+                .setIngredient('R', new RecipeChoice.MaterialChoice(Material.REDSTONE_BLOCK))
+                .setIngredient('G', new RecipeChoice.MaterialChoice(Material.GLASS))
+                .setIngredient('D', new RecipeChoice.MaterialChoice(Material.DIAMOND));
+        Bukkit.addRecipe(shapedRecipe);
     }
 
     private static void registerMotorcycleRecipe(){
@@ -159,6 +235,16 @@ public class ItemRegistry {
                 .setIngredient('G', new RecipeChoice.MaterialChoice(Material.GUNPOWDER))
                 .setIngredient('I', new RecipeChoice.MaterialChoice(Material.IRON_BLOCK))
                 .setIngredient('H', new RecipeChoice.MaterialChoice(Material.HOPPER));
+        Bukkit.addRecipe(shapedRecipe);
+    }
+
+    private static void registerFlyingMotorRecipe(){
+        ShapedRecipe shapedRecipe = new ShapedRecipe(new NamespacedKey(VehiclesPlugin.getPlugin(), "flying_motor"), FLYING_MOTOR)
+                .shape("III","FNF","GGG")
+                .setIngredient('F', new RecipeChoice.MaterialChoice(Material.FEATHER))
+                .setIngredient('G', new RecipeChoice.MaterialChoice(Material.GOLD_BLOCK))
+                .setIngredient('I', new RecipeChoice.MaterialChoice(Material.IRON_BLOCK))
+                .setIngredient('N', new RecipeChoice.MaterialChoice(Material.NETHERITE_INGOT));
         Bukkit.addRecipe(shapedRecipe);
     }
 }

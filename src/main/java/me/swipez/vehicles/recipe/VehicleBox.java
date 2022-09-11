@@ -1,18 +1,12 @@
 package me.swipez.vehicles.recipe;
 
-import me.swipez.vehicles.ArmorStandCreation;
-import me.swipez.vehicles.Vehicle;
-import me.swipez.vehicles.Vehicles;
+import me.swipez.vehicles.VehicleType;
 import me.swipez.vehicles.VehiclesPlugin;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
-import org.bukkit.Particle;
-import org.bukkit.block.Block;
 import org.bukkit.enchantments.Enchantment;
-import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
-import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -24,12 +18,12 @@ import java.util.HashMap;
 import java.util.List;
 
 public class VehicleBox implements Listener {
-    public final Vehicles vehicle;
+    public final VehicleType vehicle;
     public final String color;
     private final ChatColor chatColor;
-    public static HashMap<Vehicles, VehicleBox> vehicleBoxes = new HashMap<>();
+    public static HashMap<VehicleType, VehicleBox> vehicleBoxes = new HashMap<>();
 
-    public VehicleBox(Vehicles vehicle, String color, ChatColor chatColor) {
+    public VehicleBox(VehicleType vehicle, String color, ChatColor chatColor) {
         this.vehicle = vehicle;
         this.color = color;
         this.chatColor = chatColor;
@@ -70,7 +64,7 @@ public class VehicleBox implements Listener {
                 if (vehicleBox == 1){
                     String vehicle = persistentDataContainer.get(new NamespacedKey(VehiclesPlugin.getPlugin(), "vehicle"), PersistentDataType.STRING);
                     String color = persistentDataContainer.get(new NamespacedKey(VehiclesPlugin.getPlugin(), "color"), PersistentDataType.STRING);
-                    return new VehicleBox(Vehicles.valueOf(vehicle), color, chatColor);
+                    return new VehicleBox(VehicleType.valueOf(vehicle), color, chatColor);
                 }
             }
         }
